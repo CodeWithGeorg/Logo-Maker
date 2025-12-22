@@ -44,7 +44,15 @@ const App: React.FC = () => {
       setHistory(prev => [newItem, ...prev].slice(0, 10));
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'An unexpected error occurred during generation.');
+      
+      let displayError = err.message || 'An unexpected error occurred during generation.';
+      
+      // Handle Quota Exceeded (429) errors with a friendly UX message
+      if (displayError.includes('429') || displayError.toLowerCase().includes('quota')) {
+        displayError = "Our AI designer needs a quick breather. 🧘 We're experiencing high demand right now—please wait about a minute and try again. Thanks for your patience!";
+      }
+      
+      setError(displayError);
       setStatus(AppStatus.ERROR);
     }
   };
@@ -167,9 +175,9 @@ const App: React.FC = () => {
               </div>
 
               {error && (
-                <div className="mt-4 p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex items-center gap-2">
-                  <i className="fas fa-circle-exclamation"></i>
-                  {error}
+                <div className="mt-4 p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in slide-in-from-top-2">
+                  <i className="fas fa-circle-exclamation mt-1"></i>
+                  <span>{error}</span>
                 </div>
               )}
             </div>
