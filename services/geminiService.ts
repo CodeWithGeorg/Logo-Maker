@@ -6,7 +6,7 @@ const API_KEY = process.env.API_KEY || "";
 
 /**
  * Generates or regenerates a logo using Gemini 2.5 Flash Image.
- * Now supports multiple reference images.
+ * Acts as a senior brand consultant for high-end results.
  */
 export async function generateAiLogo(
   mode: AppMode,
@@ -14,14 +14,13 @@ export async function generateAiLogo(
   base64Images: string[]
 ): Promise<string> {
   if (!API_KEY) {
-    throw new Error("API Key is missing. Please ensure it is set in your environment.");
+    throw new Error("Missing Studio API Access. Please contact support.");
   }
 
   const ai = new GoogleGenAI({ apiKey: API_KEY });
   
   const parts: Part[] = [];
 
-  // Add all images provided as parts
   base64Images.forEach((base64Image) => {
     const match = base64Image.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
     if (match) {
@@ -34,19 +33,24 @@ export async function generateAiLogo(
     }
   });
 
-  // Define System Contexts
-  const modernizeSystemPrompt = `You are an expert brand restorer. 
-  Take the provided reference image(s) and recreate it as a modern, high-definition 4K vector-style logo. 
-  If multiple images are provided, use them to understand different angles or details of the same brand.
-  PRESERVE the core identity, layout, and iconography. 
-  Improve the typography, refine the geometry, and use professional gradients/colors.
-  User instruction: ${userPrompt || "Recreate this logo with modern aesthetics."}`;
+  const modernizeSystemPrompt = `You are a Senior Brand Strategist and Master Illustrator.
+  MISSION: Perform a "Brand Revival" on the provided logo(s).
+  CORE RULES:
+  1. PRESERVE BRAND DNA: Keep the core shapes and fundamental identity intact.
+  2. HD EVOLUTION: Render the output as a sharp, high-definition 4K professional logo.
+  3. GEOMETRIC PERFECTION: Fix any wobbly lines or blurry artifacts. Use mathematically precise vectors.
+  4. TYPEFACE UPGRADE: If text exists, use a premium, modern, and legible typeface that matches the original intent but feels contemporary.
+  5. COLOR DEPTH: Apply sophisticated color theory. Use professional gradients if requested or appropriate.
+  CONTEXT: ${userPrompt || "Modernize this brand with timeless elegance."}`;
 
-  const createSystemPrompt = `You are a world-class graphic designer. 
-  Create a brand new, high-definition professional logo from scratch based on the following description.
-  The design should be clean, iconic, and suitable for a modern tech startup or premium brand.
-  ${base64Images.length > 0 ? `Use the provided ${base64Images.length} images as style, color, or layout references. Synthesize the best elements from all of them into one unique creation.` : "Design this from scratch."}
-  Description: ${userPrompt || "A minimalist and modern professional logo."}`;
+  const createSystemPrompt = `You are an Award-Winning Logo Designer and Visionary Artist.
+  MISSION: Forge a new brand identity from the provided brief and references.
+  CORE RULES:
+  1. ICONIC SYMBOLISM: Create a mark that is simple, memorable, and unique.
+  2. SYNTHESIS: If reference images are provided, blend their style, palette, and geometric language into one cohesive new design.
+  3. PROFESSIONAL FINISH: The output must look like a multi-million dollar branding package.
+  4. VERSATILITY: Ensure the logo works well on both light and dark backgrounds.
+  5. CREATIVE BRIEF: ${userPrompt || "A minimalist and iconic professional logo."}`;
 
   parts.push({
     text: mode === 'modernize' ? modernizeSystemPrompt : createSystemPrompt
@@ -59,12 +63,11 @@ export async function generateAiLogo(
     },
   });
 
-  // Extract the image part
   for (const part of response.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData) {
       return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   }
 
-  throw new Error("The AI did not return an image. " + (response.text || "No response."));
+  throw new Error("The creative engine failed to render an image. Let's try adjusting the brief.");
 }
