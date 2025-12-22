@@ -8,7 +8,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Basic Logging
+// Logging
 console.log("-----------------------------------------");
 console.log("Server starting...");
 console.log("API Key found:", process.env.API_KEY ? "YES" : "NO");
@@ -17,16 +17,15 @@ console.log("-----------------------------------------");
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
-// Initialize Gemini with a specific Timeout Config
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
+// Use the robust Flash model with a long timeout
 const model = genAI.getGenerativeModel({ 
     model: "gemini-flash-latest",
-    // UPGRADE 1: Increase timeout to 60 seconds
     requestOptions: { timeout: 60000 } 
 });
 
-// Helper: Simple retry logic
+// Retry Logic
 async function generateWithRetry(parts, retries = 1) {
     try {
         const result = await model.generateContent({
@@ -34,8 +33,8 @@ async function generateWithRetry(parts, retries = 1) {
         });
         return await result.response;
     } catch (err) {
-        if (retries > 0 && err.message.includes("fetch failed")) {
-            console.log("   ⚠️ Network blip. Retrying...");
+        if (retries > 0 && (err.message.includes("fetch failed") || err.message.includes("503"))) {
+            console.log("   ⚠️ Network/Server blip. Retrying...");
             return await generateWithRetry(parts, retries - 1);
         }
         throw err;
@@ -49,60 +48,80 @@ app.post('/api/generate-logo', async (req, res) => {
     try {
         const parts = [];
 
-        // Image Handling
+        // 1. Image Handling (Only for modernize mode)
         if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
             base64Images.forEach((base64String, index) => {
                 try {
                     const base64Data = base64String.split(',')[1]; 
                     const mimeMatch = base64String.match(/:(.*?);/);
                     const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-                    
                     if (base64Data) {
                         parts.push({
-                            inlineData: {
-                                data: base64Data,
-                                mimeType: mimeType
-                            }
+                            inlineData: { data: base64Data, mimeType: mimeType }
                         });
                         console.log(`   - Attached Image ${index + 1}`);
                     }
-                } catch (e) { /* ignore bad images */ }
+                } catch (e) { /* ignore */ }
             });
         }
 
-        const perfectionDirectives = `
-            You are an expert Vector Logo Designer.
-            TASK: Generate a ${mode === 'modernize' ? 'revamped' : 'new'} logo.
-            CRITICAL: Return ONLY valid SVG code. Start with <svg and end with </svg>.
-            NO markdown, NO text explanations. 
-            Ensure the SVG uses a standard 512x512 viewbox, high contrast, and professional geometry.
-        `;
+        // 2. THE FIX: Strict "Nuclear" Prompt
+        // We give different instructions for "Create" vs "Modernize"
+        let systemContext = "";
+        
+        if (mode === 'create') {
+            systemContext = `
+                ROLE: You are a pure SVG Rendering Engine. 
+                INPUT: A text description of a logo.
+                OUTPUT: ONLY raw SVG XML code.
+                RULES:
+                1. DO NOT write explanations.
+                2. DO NOT use markdown code blocks (no \`\`\`xml).
+                3. START immediately with <svg ...
+                4. END immediately with </svg>.
+                5. Use a standard 512x512 viewBox.
+                6. Make the design thick, bold, and high-contrast (Vector Style).
+                7. If the user prompt is vague (e.g., "generate a logo"), invent a modern abstract geometric shape.
+            `;
+        } else {
+            systemContext = `
+                ROLE: You are a Vectorizer. 
+                TASK: Convert the attached image reference into a clean, modern SVG logo.
+                OUTPUT: ONLY raw SVG XML code.
+                RULES:
+                1. Simplify the design into geometric shapes.
+                2. Remove noise and text artifacts.
+                3. Return ONLY the <svg>...</svg> code.
+            `;
+        }
 
-        parts.push({ text: `${perfectionDirectives}\n\nUSER REQUEST: ${userPrompt}` });
+        // Combine prompt
+        parts.push({ text: `${systemContext}\n\nUSER INSTRUCTION: ${userPrompt}` });
 
         console.log("   - Sending to AI...");
-        
-        // UPGRADE 2: Use the retry function
         const response = await generateWithRetry(parts);
         const text = response.text();
 
-        // Extract SVG
+        // 3. Robust Extraction
+        // We accept the code even if it's wrapped in markdown, or if it has text before/after
         const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/);
+
         if (svgMatch) {
-            const base64Svg = Buffer.from(svgMatch[0]).toString('base64');
+            const cleanSvg = svgMatch[0];
+            const base64Svg = Buffer.from(cleanSvg).toString('base64');
             console.log("   ✅ Success! SVG generated.");
             return res.status(200).json({ image: `data:image/svg+xml;base64,${base64Svg}` });
         } else {
-            throw new Error("AI output text but no SVG code.");
+            // DEBUG: Log what the AI actually said so we can fix it if it happens again
+            console.error("   ❌ AI Failed to output SVG. AI Response preview:");
+            console.error(text.substring(0, 200) + "..."); 
+            throw new Error("AI generated a text description instead of an image code.");
         }
 
     } catch (err) {
         console.error("   ❌ Error:", err.message);
-        
         let msg = "Generation failed.";
         if (err.message.includes("429")) msg = "Too many requests. Please wait 1 min.";
-        if (err.message.includes("fetch failed")) msg = "Network timeout. Please check your internet.";
-
         return res.status(500).json({ message: msg, details: err.message });
     }
 });
