@@ -8,37 +8,52 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 1. Better Error Logging
+// Basic Logging
 console.log("-----------------------------------------");
 console.log("Server starting...");
-console.log("API Key found:", process.env.API_KEY ? "YES (Length: " + process.env.API_KEY.length + ")" : "NO - CHECK .ENV FILE");
+console.log("API Key found:", process.env.API_KEY ? "YES" : "NO");
 console.log("-----------------------------------------");
 
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '50mb' }));
 
+// Initialize Gemini with a specific Timeout Config
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-// Change this line:
-const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-app.post('/api/generate-logo', async (req, res) => {
-    if (!process.env.API_KEY) {
-        console.error("❌ ERROR: API Key is missing.");
-        return res.status(500).json({ message: "Server API Key not configured." });
-    }
 
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-flash-latest",
+    // UPGRADE 1: Increase timeout to 60 seconds
+    requestOptions: { timeout: 60000 } 
+});
+
+// Helper: Simple retry logic
+async function generateWithRetry(parts, retries = 1) {
+    try {
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: parts }],
+        });
+        return await result.response;
+    } catch (err) {
+        if (retries > 0 && err.message.includes("fetch failed")) {
+            console.log("   ⚠️ Network blip. Retrying...");
+            return await generateWithRetry(parts, retries - 1);
+        }
+        throw err;
+    }
+}
+
+app.post('/api/generate-logo', async (req, res) => {
     const { mode, userPrompt, base64Images } = req.body;
-    console.log(`\n🎨 New Request: ${mode} | Prompt: "${userPrompt.substring(0, 30)}..."`);
+    console.log(`\n🎨 Request: ${mode} | Prompt: "${userPrompt.substring(0, 20)}..."`);
 
     try {
         const parts = [];
 
         // Image Handling
-        if (base64Images && Array.isArray(base64Images)) {
+        if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
             base64Images.forEach((base64String, index) => {
                 try {
-                    // Extract strictly the base64 data
                     const base64Data = base64String.split(',')[1]; 
-                    // Extract mime type (e.g., image/png)
                     const mimeMatch = base64String.match(/:(.*?);/);
                     const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
                     
@@ -49,66 +64,49 @@ app.post('/api/generate-logo', async (req, res) => {
                                 mimeType: mimeType
                             }
                         });
-                        console.log(`   - Attached Image ${index + 1} (${mimeType})`);
+                        console.log(`   - Attached Image ${index + 1}`);
                     }
-                } catch (imgErr) {
-                    console.error("   ❌ Error processing image:", imgErr);
-                }
+                } catch (e) { /* ignore bad images */ }
             });
         }
 
         const perfectionDirectives = `
-            You are an expert Logo Designer and SVG coder.
-            TASK: Create a professional vector logo based on the user request.
-            CRITICAL: Return ONLY valid SVG code. Do not output markdown code fences like \`\`\`xml. 
-            Just start with <svg ... and end with </svg>.
-            
-            REQUIREMENTS:
-            1. Use a standard 512x512 viewbox.
-            2. Use professional, balanced geometry.
-            3. Ensure high contrast and clean lines.
-            4. Make it look modern and sleek.
+            You are an expert Vector Logo Designer.
+            TASK: Generate a ${mode === 'modernize' ? 'revamped' : 'new'} logo.
+            CRITICAL: Return ONLY valid SVG code. Start with <svg and end with </svg>.
+            NO markdown, NO text explanations. 
+            Ensure the SVG uses a standard 512x512 viewbox, high contrast, and professional geometry.
         `;
 
         parts.push({ text: `${perfectionDirectives}\n\nUSER REQUEST: ${userPrompt}` });
 
-        console.log("   - Sending request to Gemini...");
-        const result = await model.generateContent({
-            contents: [{ role: "user", parts: parts }],
-        });
-
-        const response = await result.response;
+        console.log("   - Sending to AI...");
+        
+        // UPGRADE 2: Use the retry function
+        const response = await generateWithRetry(parts);
         const text = response.text();
-        console.log("   - Received response from Gemini.");
 
-        // Robust SVG Extraction using Regex
-        // This looks for <svg ... </svg> even if it's buried in text or markdown
+        // Extract SVG
         const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/);
-
         if (svgMatch) {
-            const svgContent = svgMatch[0];
-            const base64Svg = Buffer.from(svgContent).toString('base64');
-            const finalImage = `data:image/svg+xml;base64,${base64Svg}`;
-            
+            const base64Svg = Buffer.from(svgMatch[0]).toString('base64');
             console.log("   ✅ Success! SVG generated.");
-            return res.status(200).json({ image: finalImage });
+            return res.status(200).json({ image: `data:image/svg+xml;base64,${base64Svg}` });
         } else {
-            console.error("   ❌ AI did not return SVG. Raw response preview:", text.substring(0, 200));
-            throw new Error("AI generated a description but no visual code. Please try a simpler prompt.");
+            throw new Error("AI output text but no SVG code.");
         }
 
     } catch (err) {
-        console.error("❌ CRITICAL SERVER ERROR:", err);
+        console.error("   ❌ Error:", err.message);
         
-        // Return a cleaner error to the frontend
-        let message = "Error generating logo.";
-        if (err.message.includes("429")) message = "Traffic Limit Reached. Please wait 60 seconds.";
-        if (err.message.includes("SAFETY")) message = "The request was blocked by AI safety filters.";
-        
-        return res.status(500).json({ message: message, details: err.message });
+        let msg = "Generation failed.";
+        if (err.message.includes("429")) msg = "Too many requests. Please wait 1 min.";
+        if (err.message.includes("fetch failed")) msg = "Network timeout. Please check your internet.";
+
+        return res.status(500).json({ message: msg, details: err.message });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`✅ Backend running on http://localhost:${PORT}`);
+    console.log(`✅ Backend ready on port ${PORT}`);
 });
