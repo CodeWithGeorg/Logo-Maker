@@ -1,7 +1,7 @@
 
 export interface GenerationHistoryItem {
   id: string;
-  originalImage?: string;
+  originalImages?: string[];
   generatedImage: string;
   prompt: string;
   mode: AppMode;
