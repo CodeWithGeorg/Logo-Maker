@@ -3,23 +3,29 @@ import React from 'react';
 
 const Header: React.FC = () => {
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 md:h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="bg-indigo-600 p-1.5 md:p-2 rounded-lg text-white">
-            <i className="fas fa-wand-magic-sparkles text-sm md:text-xl"></i>
+    <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-50 transition-all duration-300">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 transform -rotate-3 hover:rotate-0 transition-transform cursor-pointer">
+            <i className="fas fa-shapes text-lg"></i>
           </div>
-          <span className="text-lg md:text-xl font-bold text-slate-900 tracking-tight">
+          <span className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter">
             LogoModernizer<span className="text-indigo-600">AI</span>
           </span>
         </div>
-        <nav className="hidden md:flex gap-6 items-center">
-          <a href="#" className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Features</a>
-          <a href="#" className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Support</a>
+        
+        <nav className="hidden lg:flex gap-10 items-center">
+          <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">The Process</a>
+          <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">Gallery</a>
+          <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors">Support</a>
         </nav>
-        <div>
-          <button className="bg-indigo-600 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-full text-xs md:text-sm font-semibold hover:bg-indigo-700 transition-all shadow-sm active:scale-95">
-            Try Pro
+
+        <div className="flex items-center gap-4">
+          <button className="hidden sm:block text-xs font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 px-4 py-2 transition-colors">
+            Sign In
+          </button>
+          <button className="bg-slate-900 text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">
+            Studio Pro
           </button>
         </div>
       </div>
