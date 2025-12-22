@@ -13,7 +13,6 @@ const LogoUploader: React.FC<LogoUploaderProps> = ({ onImagesChange, selectedIma
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Limit to 5 total images
     const remainingSlots = 5 - selectedImages.length;
     const filesToProcess = files.slice(0, remainingSlots);
 
@@ -29,7 +28,6 @@ const LogoUploader: React.FC<LogoUploaderProps> = ({ onImagesChange, selectedIma
       onImagesChange([...selectedImages, ...newBase64s]);
     });
 
-    // Reset input so the same file can be picked again if removed
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -46,39 +44,43 @@ const LogoUploader: React.FC<LogoUploaderProps> = ({ onImagesChange, selectedIma
   };
 
   return (
-    <div className="w-full space-y-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-bold text-slate-700">Reference Images ({selectedImages.length}/5)</span>
+    <div className="w-full space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-black uppercase tracking-widest text-slate-400">Reference Board ({selectedImages.length}/5)</span>
         {selectedImages.length > 0 && (
           <button 
             onClick={() => onImagesChange([])}
-            className="text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors uppercase tracking-wider"
+            className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest"
           >
-            Clear All
+            Reset Board
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
         {selectedImages.map((img, idx) => (
-          <div key={idx} className="relative aspect-square rounded-xl border border-slate-200 bg-white p-1 overflow-hidden group shadow-sm">
-            <img src={img} alt={`Ref ${idx}`} className="w-full h-full object-contain" />
-            <button 
-              onClick={() => removeImage(idx)}
-              className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-            >
-              <i className="fas fa-times text-[10px]"></i>
-            </button>
+          <div key={idx} className="relative aspect-square rounded-2xl border border-slate-100 bg-slate-50 p-1 group overflow-hidden shadow-sm hover:shadow-md transition-all">
+            <img src={img} alt={`Ref ${idx}`} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500" />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
+               <button 
+                onClick={() => removeImage(idx)}
+                className="w-8 h-8 bg-white text-slate-900 rounded-full flex items-center justify-center shadow-xl hover:bg-red-500 hover:text-white transition-colors"
+              >
+                <i className="fas fa-trash-alt text-[10px]"></i>
+              </button>
+            </div>
           </div>
         ))}
         
         {selectedImages.length < 5 && (
           <button 
             onClick={triggerUpload}
-            className="aspect-square rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center hover:border-indigo-400 hover:bg-indigo-50/30 transition-all active:scale-[0.97]"
+            className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center hover:border-indigo-400 hover:bg-indigo-50/30 transition-all duration-300 group"
           >
-            <i className="fas fa-plus text-slate-400 mb-1"></i>
-            <span className="text-[10px] font-bold text-slate-500">Add Ref</span>
+            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-300 group-hover:text-indigo-600 group-hover:shadow-sm transition-all mb-1">
+              <i className="fas fa-plus text-xs"></i>
+            </div>
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter group-hover:text-indigo-600">Add</span>
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -94,13 +96,13 @@ const LogoUploader: React.FC<LogoUploaderProps> = ({ onImagesChange, selectedIma
       {selectedImages.length === 0 && (
         <div 
           onClick={triggerUpload}
-          className="w-full aspect-[16/9] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-slate-100 transition-all"
+          className="w-full py-12 rounded-[2rem] border-2 border-dashed border-slate-200 bg-slate-50/30 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-white transition-all duration-500 group"
         >
-          <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mb-3 text-slate-300 border border-slate-100">
-            <i className="fas fa-cloud-upload-alt text-xl"></i>
+          <div className="w-16 h-16 bg-white rounded-3xl shadow-[0_4px_15px_rgb(0,0,0,0.03)] flex items-center justify-center mb-4 text-slate-200 group-hover:text-indigo-400 group-hover:shadow-indigo-100 transition-all">
+            <i className="fas fa-cloud-upload-alt text-2xl"></i>
           </div>
-          <p className="text-slate-700 font-bold text-xs">Upload references</p>
-          <p className="text-slate-400 text-[10px]">Up to 5 images (styles, sketches, tags)</p>
+          <p className="text-slate-800 font-bold text-sm tracking-tight group-hover:text-indigo-600 transition-colors">Import Vision References</p>
+          <p className="text-slate-400 text-[10px] font-medium mt-1">Sketches, moodboards, or current marks (Max 5)</p>
         </div>
       )}
     </div>
