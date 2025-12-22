@@ -19,13 +19,11 @@ app.use(express.json({ limit: '50mb' }));
 
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
-// Use the robust Flash model with a long timeout
 const model = genAI.getGenerativeModel({ 
     model: "gemini-flash-latest",
     requestOptions: { timeout: 60000 } 
 });
 
-// Retry Logic
 async function generateWithRetry(parts, retries = 1) {
     try {
         const result = await model.generateContent({
@@ -43,67 +41,66 @@ async function generateWithRetry(parts, retries = 1) {
 
 app.post('/api/generate-logo', async (req, res) => {
     const { mode, userPrompt, base64Images } = req.body;
-    console.log(`\n🎨 Request: ${mode} | Prompt: "${userPrompt.substring(0, 20)}..."`);
+    console.log(`\n🎨 Request: ${mode} | Prompt: "${userPrompt.substring(0, 30)}..."`);
 
     try {
         const parts = [];
 
-        // 1. Image Handling (Only for modernize mode)
+        // 1. Image Handling
         if (base64Images && Array.isArray(base64Images) && base64Images.length > 0) {
-            base64Images.forEach((base64String, index) => {
+            base64Images.forEach((base64String) => {
                 try {
                     const base64Data = base64String.split(',')[1]; 
                     const mimeMatch = base64String.match(/:(.*?);/);
                     const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
                     if (base64Data) {
-                        parts.push({
-                            inlineData: { data: base64Data, mimeType: mimeType }
-                        });
-                        console.log(`   - Attached Image ${index + 1}`);
+                        parts.push({ inlineData: { data: base64Data, mimeType: mimeType } });
                     }
                 } catch (e) { /* ignore */ }
             });
         }
 
-        // 2. THE FIX: Strict "Nuclear" Prompt
-        // We give different instructions for "Create" vs "Modernize"
+        // 2. THE UPGRADED "CREATIVE DIRECTOR" PROMPT
         let systemContext = "";
         
         if (mode === 'create') {
             systemContext = `
-                ROLE: You are a pure SVG Rendering Engine. 
-                INPUT: A text description of a logo.
-                OUTPUT: ONLY raw SVG XML code.
-                RULES:
-                1. DO NOT write explanations.
-                2. DO NOT use markdown code blocks (no \`\`\`xml).
-                3. START immediately with <svg ...
-                4. END immediately with </svg>.
-                5. Use a standard 512x512 viewBox.
-                6. Make the design thick, bold, and high-contrast (Vector Style).
-                7. If the user prompt is vague (e.g., "generate a logo"), invent a modern abstract geometric shape.
+                ROLE: You are a World-Class Brand Designer & SVG Coder.
+                TASK: Create a professional, high-impact vector logo.
+                
+                STRICT VISUAL RULES:
+                1. IF THE USER ASKS FOR TEXT/NAME: Do NOT try to draw the letters with paths. Use the <text> tag.
+                   - Example: <text x="50%" y="80%" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="48" fill="#333">NAME</text>
+                2. THE ICON: Create a unique, abstract mark using <path>. Do NOT use simple circles or squares. 
+                   - Use gradients (<defs><linearGradient>...) to make it look premium.
+                   - Use interference patterns, interlaced lines, or geometric abstractions.
+                3. LAYOUT: Center the icon in the middle (approx y=200) and place the text below it (approx y=400).
+                4. CANVAS: Use viewBox="0 0 512 512".
+                5. COLOR: Use professional tech palettes (Deep Blue & Electric Blue, or Black & Gold).
+                
+                OUTPUT FORMAT:
+                - Return ONLY the raw <svg>...</svg> code.
+                - No markdown, no explanations.
             `;
         } else {
             systemContext = `
                 ROLE: You are a Vectorizer. 
-                TASK: Convert the attached image reference into a clean, modern SVG logo.
-                OUTPUT: ONLY raw SVG XML code.
+                TASK: Redraw the provided image as a clean, professional SVG logo.
                 RULES:
-                1. Simplify the design into geometric shapes.
-                2. Remove noise and text artifacts.
-                3. Return ONLY the <svg>...</svg> code.
+                1. Trace the key shapes using <path>.
+                2. Simplify messy details into clean geometry.
+                3. Use gradients to add depth.
+                4. Return ONLY raw SVG code.
             `;
         }
 
-        // Combine prompt
-        parts.push({ text: `${systemContext}\n\nUSER INSTRUCTION: ${userPrompt}` });
+        parts.push({ text: `${systemContext}\n\nDESIGN BRIEF: ${userPrompt}` });
 
         console.log("   - Sending to AI...");
         const response = await generateWithRetry(parts);
         const text = response.text();
 
-        // 3. Robust Extraction
-        // We accept the code even if it's wrapped in markdown, or if it has text before/after
+        // 3. Extraction
         const svgMatch = text.match(/<svg[\s\S]*?<\/svg>/);
 
         if (svgMatch) {
@@ -112,10 +109,8 @@ app.post('/api/generate-logo', async (req, res) => {
             console.log("   ✅ Success! SVG generated.");
             return res.status(200).json({ image: `data:image/svg+xml;base64,${base64Svg}` });
         } else {
-            // DEBUG: Log what the AI actually said so we can fix it if it happens again
-            console.error("   ❌ AI Failed to output SVG. AI Response preview:");
-            console.error(text.substring(0, 200) + "..."); 
-            throw new Error("AI generated a text description instead of an image code.");
+            console.error("   ❌ AI Failed. Response preview:", text.substring(0, 200)); 
+            throw new Error("AI generated text instead of visual code.");
         }
 
     } catch (err) {
