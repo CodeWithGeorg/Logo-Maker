@@ -5,44 +5,75 @@ import LogoUploader from './components/LogoUploader';
 import { generateAiLogo } from './services/geminiService';
 import { AppStatus, GenerationHistoryItem, AppMode } from './types';
 
+interface ModeState {
+  images: string[];
+  prompt: string;
+  result: string | null;
+  error: string | null;
+}
+
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('modernize');
-  const [originalImage, setOriginalImage] = useState<string | null>(null);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
-  const [error, setError] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState<string>('');
   const [history, setHistory] = useState<GenerationHistoryItem[]>([]);
 
+  // Independent state for Modernize
+  const [modernizeState, setModernizeState] = useState<ModeState>({
+    images: [],
+    prompt: '',
+    result: null,
+    error: null
+  });
+
+  // Independent state for Create
+  const [createState, setCreateState] = useState<ModeState>({
+    images: [],
+    prompt: '',
+    result: null,
+    error: null
+  });
+
+  const activeState = mode === 'modernize' ? modernizeState : createState;
+
+  const updateActiveState = (updates: Partial<ModeState>) => {
+    if (mode === 'modernize') {
+      setModernizeState(prev => ({ ...prev, ...updates }));
+    } else {
+      setCreateState(prev => ({ ...prev, ...updates }));
+    }
+  };
+
   const handleGenerate = async () => {
-    if (mode === 'modernize' && !originalImage) {
-      setError("Please upload an original logo to modernize.");
+    const currentImages = activeState.images;
+    const currentPrompt = activeState.prompt;
+
+    if (mode === 'modernize' && currentImages.length === 0) {
+      updateActiveState({ error: "Please upload at least one original logo to modernize." });
       return;
     }
-    if (mode === 'create' && !prompt && !originalImage) {
-      setError("Please provide a description or an image reference for your new logo.");
+    if (mode === 'create' && !currentPrompt && currentImages.length === 0) {
+      updateActiveState({ error: "Please provide a description or image references for your new logo." });
       return;
     }
 
     setStatus(AppStatus.LOADING);
-    setError(null);
+    updateActiveState({ error: null });
 
     try {
-      const result = await generateAiLogo(mode, prompt, originalImage);
-      setGeneratedImage(result);
+      const result = await generateAiLogo(mode, currentPrompt, currentImages);
+      updateActiveState({ result, error: null });
       setStatus(AppStatus.SUCCESS);
       
       const newItem: GenerationHistoryItem = {
         id: Date.now().toString(),
-        originalImage: originalImage || undefined,
+        originalImages: [...currentImages],
         generatedImage: result,
-        prompt: prompt || (mode === 'modernize' ? 'Modernized Logo' : 'AI Generated Logo'),
+        prompt: currentPrompt || (mode === 'modernize' ? 'Modernized Logo' : 'AI Generated Logo'),
         mode: mode,
         timestamp: Date.now(),
       };
       setHistory(prev => [newItem, ...prev].slice(0, 10));
       
-      // Auto-scroll to result on mobile
       if (window.innerWidth < 1024) {
         document.getElementById('result-preview')?.scrollIntoView({ behavior: 'smooth' });
       }
@@ -54,20 +85,22 @@ const App: React.FC = () => {
         displayError = "Our AI designer needs a quick breather. 🧘 We're experiencing high demand right now—please wait about a minute and try again. Thanks for your patience!";
       }
       
-      setError(displayError);
+      updateActiveState({ error: displayError });
       setStatus(AppStatus.ERROR);
     }
   };
 
-  const handleImageSelect = (base64: string) => {
-    setOriginalImage(base64);
-    setError(null);
+  const handleImagesChange = (images: string[]) => {
+    updateActiveState({ images, error: null });
+  };
+
+  const handlePromptChange = (prompt: string) => {
+    updateActiveState({ prompt, error: null });
   };
 
   const toggleMode = (newMode: AppMode) => {
     setMode(newMode);
-    setError(null);
-    setGeneratedImage(null);
+    setStatus(AppStatus.IDLE);
   };
 
   return (
@@ -75,7 +108,6 @@ const App: React.FC = () => {
       <Header />
       
       <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12 w-full">
-        {/* Mode Switcher */}
         <div className="flex justify-center mb-8 md:mb-12">
           <div className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200 flex w-full max-w-sm">
             <button
@@ -103,7 +135,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Hero Section */}
         <div className="text-center mb-10 md:mb-16">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 mb-3 md:mb-4 tracking-tight leading-tight">
             {mode === 'modernize' ? (
@@ -115,38 +146,31 @@ const App: React.FC = () => {
           <p className="text-sm sm:text-base md:text-lg text-slate-600 max-w-2xl mx-auto px-4">
             {mode === 'modernize' 
               ? "Recreate old or blurry logos with professional, crisp precision using advanced AI."
-              : "Describe your vision and watch our AI designer craft a unique, professional logo instantly."}
+              : "Combine up to 5 reference images and sketches to craft a unique, professional identity."}
           </p>
         </div>
 
-        {/* Workspace Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 mb-12">
-          {/* Left Column: Inputs */}
           <div className="space-y-6 order-1">
             <div className="bg-white p-5 md:p-8 rounded-[2rem] shadow-sm border border-slate-200">
               <div className="mb-6 md:mb-8">
                 <LogoUploader 
-                  onImageSelect={handleImageSelect} 
-                  selectedImage={originalImage} 
+                  onImagesChange={handleImagesChange} 
+                  selectedImages={activeState.images} 
                 />
-                {mode === 'create' && (
-                  <p className="text-[10px] sm:text-xs text-slate-400 mt-2 text-center flex items-center justify-center gap-1">
-                    <i className="fas fa-info-circle"></i> Upload an image for style reference.
-                  </p>
-                )}
               </div>
               
               <div className="space-y-3">
                 <h3 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
                   <i className="fas fa-pen-nib text-indigo-500"></i>
-                  {mode === 'modernize' ? "Style Adjustments" : "Description"}
+                  {mode === 'modernize' ? "Style Adjustments" : "Prompt & Tags"}
                 </h3>
                 <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  value={activeState.prompt}
+                  onChange={(e) => handlePromptChange(e.target.value)}
                   placeholder={mode === 'modernize' 
                     ? "e.g., Use more vibrant blues, make the text bolder..." 
-                    : "e.g., A minimalist geometric fox head for a tech startup called 'FireBolt'..."}
+                    : "e.g., A minimalist geometric fox. Style: Flat design. Tags: #Tech #Agile #Orange"}
                   className="w-full h-28 md:h-32 p-4 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none resize-none text-sm md:text-base text-slate-700 bg-slate-50/50"
                 />
               </div>
@@ -176,16 +200,15 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              {error && (
+              {activeState.error && (
                 <div className="mt-4 p-4 bg-red-50 text-red-600 text-xs sm:text-sm rounded-xl border border-red-100 flex items-start gap-2 animate-in fade-in slide-in-from-top-2">
                   <i className="fas fa-circle-exclamation mt-0.5"></i>
-                  <span>{error}</span>
+                  <span>{activeState.error}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Right Column: Results */}
           <div id="result-preview" className="order-2 lg:order-2">
             <div className="bg-white p-5 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col h-full min-h-[400px] md:min-h-[500px]">
               <h3 className="text-base md:text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -198,22 +221,22 @@ const App: React.FC = () => {
                   <div className="absolute inset-0 z-10 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
                     <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
                     <p className="text-slate-800 font-bold text-lg mb-1">AI Designer at Work</p>
-                    <p className="text-slate-500 text-xs md:text-sm">Crafting pixels, refining curves...</p>
+                    <p className="text-slate-500 text-xs md:text-sm">Processing current request...</p>
                   </div>
                 )}
 
-                {generatedImage ? (
+                {activeState.result ? (
                   <div className="w-full h-full p-4 md:p-6 flex flex-col items-center">
                     <div className="flex-grow flex items-center justify-center w-full">
                       <img 
-                        src={generatedImage} 
+                        src={activeState.result} 
                         alt="AI Generated Logo" 
                         className="max-w-full max-h-[300px] md:max-h-[350px] object-contain drop-shadow-2xl animate-in zoom-in duration-500"
                       />
                     </div>
                     <div className="mt-6 w-full">
                       <a 
-                        href={generatedImage} 
+                        href={activeState.result} 
                         download={`${mode}-logo-${Date.now()}.png`}
                         className="w-full bg-slate-900 text-white py-3.5 md:py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-black transition-all active:scale-95"
                       >
@@ -224,7 +247,9 @@ const App: React.FC = () => {
                 ) : (
                   <div className="text-center p-12 opacity-30">
                     <i className="fas fa-drafting-compass text-5xl md:text-6xl mb-4 text-slate-300"></i>
-                    <p className="text-slate-500 font-medium text-sm md:text-base">Your creation will appear here</p>
+                    <p className="text-slate-500 font-medium text-sm md:text-base">
+                      {mode === 'modernize' ? 'Upload your logo to begin' : 'Describe your vision to begin'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -232,13 +257,14 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* History Section */}
         {history.length > 0 && (
           <div className="mt-12 md:mt-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <h2 className="text-xl md:text-2xl font-bold text-slate-900 mb-6 md:mb-8 flex items-center gap-2">
-              <i className="fas fa-layer-group text-indigo-500"></i>
-              Recent Creations
-            </h2>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <i className="fas fa-layer-group text-indigo-500"></i>
+                Recent Creations
+              </h2>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
               {history.map((item) => (
                 <div key={item.id} className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all group">
